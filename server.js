@@ -83,8 +83,8 @@ app.post('/api/auth/login-ou-cadastro', tratarLoginCadastro);
 app.post('/auth/login-ou-cadastro', tratarLoginCadastro);
 
 // Acoplamento do ecossistema de rotas de leitura
-app.use('/api/leitura', leituraRoutes);
-app.use('/leitura', leituraRoutes);
+app.use('/api/registros_leitura', leituraRoutes);
+app.use('/registros_leitura', leituraRoutes);
 
 // ============ TRATAMENTO CENTRALIZADO DE ROTAS INEXISTENTES ============
 app.use((req, res) => {

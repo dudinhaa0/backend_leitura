@@ -1,7 +1,7 @@
 const supabase = require('../services/supabaseClient');
 
 async function authMiddleware(req, res, next) {
-  // Adaptado: Captura o RM tanto do Header quanto da Query String (Compatível com o seu front)
+  // Captura o RM tanto do Header quanto da Query String
   const rm = req.headers['rm'] || req.query.rm;
 
   if (!rm) {
@@ -9,23 +9,25 @@ async function authMiddleware(req, res, next) {
   }
 
   try {
-    // Busca o aluno no banco de dados do Supabase usando o RM localizado
+    // Busca o usuário na tabela 'usuarios' usando a coluna 'RM' (maiúsculo)
     const { data, error } = await supabase
-      .from('alunos')
-      .select('id, rm, turma, nome')
-      .eq('rm', rm)
-      .maybeSingle(); // Uso do maybeSingle para evitar lançar exceções brutas caso não encontre
+      .from('usuarios')
+      .select('id, RM, turma, nome')  // ← 'RM' maiúsculo
+      .eq('RM', String(rm))            // ← 'RM' maiúsculo
+      .maybeSingle();
 
     if (error || !data) {
-      return res.status(401).json({ error: 'Aluno não encontrado ou não cadastrado no sistema.' });
+      console.error('Usuário não encontrado para RM:', rm);
+      return res.status(401).json({ error: 'Usuário não encontrado ou não cadastrado no sistema.' });
     }
 
-    // Injeta os dados tratados do aluno na requisição para uso dos controllers seguintes
+    // Injeta os dados do usuário na requisição
     req.aluno = data;
+    req.usuario = data;
     
-    // Passa o controle para o próximo passo da rota (Controller)
     next();
   } catch (err) {
+    console.error('Erro no authMiddleware:', err);
     return res.status(500).json({ error: 'Erro interno no middleware de autenticação: ' + err.message });
   }
 }

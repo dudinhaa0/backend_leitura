@@ -7,7 +7,7 @@ async function buscarAlunoIdPorRm(req) {
 
   try {
     const { data: aluno, error } = await supabase
-      .from('alunos')
+      .from('usuarios')
       .select('id')
       .eq('rm', rm)
       .maybeSingle(); // Impede falhas brutas 406 do PostgREST se o RM não existir
@@ -126,7 +126,7 @@ async function rankingTurmas(req, res) {
     // Otimizado: Injeção do modificador "!inner" para garantir integridade relacional do Supabase
     const { data, error } = await supabase
       .from('registros_leitura')
-      .select('minutos, alunos!inner(turma)');
+      .select('minutos, usuarios!inner(turma)');
 
     if (error) {
       console.error('Erro na consulta do Supabase para o ranking:', error);
@@ -140,7 +140,7 @@ async function rankingTurmas(req, res) {
     // Agrupa e soma os minutos de cada turma de forma manual
     const turmas = {};
     data.forEach(reg => {
-      const turma = reg.alunos?.turma;
+      const turma = reg.usuarios?.turma;
       if (turma) {
         turmas[turma] = (turmas[turma] || 0) + reg.minutos;
       }

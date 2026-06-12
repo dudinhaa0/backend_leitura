@@ -40,33 +40,56 @@ app.get('/', (req, res) => {
 
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
-// ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
-// ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 async function tratarLoginCadastro(req, res) {
-    // Aceita tanto se o front mandar 'rm' minúsculo quanto se mandar outra variação
-    const rm = req.body.rm || req.body.RM;
+    const { rm, nome, turma } = req.body;
     
     if (!rm) {
-        return res.status(400).json({ error: 'O número do RM é obrigatório para acessar.' });
+        return res.status(400).json({ error: 'O número do RM é obrigatório.' });
     }
 
     try {
-        // Busca na coluna 'RM' maiúscula do seu Supabase
-        const { data: alunoExistente, error: erroBusca } = await supabase
+        // Busca usando a coluna 'RM' (maiúsculo)
+        const { data: usuarioExistente, error: erroBusca } = await supabase
             .from('usuarios')
             .select('*')
-            .eq('RM', rm.toString()) // Garante que compara como texto
+            .eq('RM', String(rm))  // ← 'RM' maiúsculo
             .maybeSingle();
 
-        if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
-
-        if (alunoExistente) {
-            return res.json({ success: true, message: 'Login efetuado com sucesso!', aluno: alunoExistente });
+        if (erroBusca) {
+            return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
         }
 
-        return res.status(404).json({ error: 'Usuário não cadastrado no sistema.' });
+        // Se encontrou o usuário
+        if (usuarioExistente) {
+            return res.json({ success: true, message: 'Login efetuado!', aluno: usuarioExistente });
+        }
+
+        // Se não encontrou e faltam dados
+        if (!nome || !turma) {
+            return res.status(404).json({ error: 'Aluno não cadastrado. Preencha o formulário de Registro.' });
+        }
+
+        // Cadastrar novo usuário (nota: email e senha são obrigatórios na sua tabela!)
+        // ⚠️ ATENÇÃO: Sua tabela exige email e senha. Você precisa adicionar esses campos no cadastro!
+        const { data: novoAluno, error: erroInsercao } = await supabase
+            .from('usuarios')
+            .insert([{ 
+                RM: String(rm),  // ← 'RM' maiúsculo
+                nome: nome, 
+                turma: turma,
+                email: `${rm}@sesi.com.br`,  // Email temporário
+                senha: '123456'              // Senha temporária
+            }])
+            .select()
+            .single();
+
+        if (erroInsercao) {
+            return res.status(500).json({ error: 'Erro ao registrar: ' + erroInsercao.message });
+        }
+
+        return res.status(201).json({ success: true, message: 'Cadastro efetuado!', aluno: novoAluno });
     } catch (err) {
-        return res.status(500).json({ error: 'Falha interna no processamento: ' + err.message });
+        return res.status(500).json({ error: 'Falha interna: ' + err.message });
     }
 }
 // Vinculação dos endpoints de login/cadastro
