@@ -39,6 +39,7 @@ app.get('/', (req, res) => {
 });
 
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
+// ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 async function tratarLoginCadastro(req, res) {
     const { rm, nome, turma } = req.body;
     
@@ -47,16 +48,16 @@ async function tratarLoginCadastro(req, res) {
     }
 
     try {
-        // Busca o aluno de forma blindada com maybeSingle() evitando estourar erro interno
+        // 🟢 ALTERADO DE 'alunos' PARA 'usuarios'
         const { data: alunoExistente, error: erroBusca } = await supabase
-            .from('alunos')
+            .from('usuarios')
             .select('*')
             .eq('rm', rm)
             .maybeSingle();
 
         if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
 
-        // Se encontrou o aluno cadastrado, retorna os dados para o localStorage do front
+        // Se encontrou o usuário cadastrado, retorna os dados para o localStorage do front
         if (alunoExistente) {
             return res.json({ success: true, message: 'Login efetuado com sucesso!', aluno: alunoExistente });
         }
@@ -66,9 +67,9 @@ async function tratarLoginCadastro(req, res) {
             return res.status(404).json({ error: 'Aluno não cadastrado. Preencha o formulário de Registro.' });
         }
 
-        // Se o formulário de Registro foi preenchido, insere o aluno automaticamente
+        // 🟢 ALTERADO DE 'alunos' PARA 'usuarios'
         const { data: novoAluno, error: erroInsercao } = await supabase
-            .from('alunos')
+            .from('usuarios')
             .insert([{ rm, nome, turma }])
             .select()
             .single();
