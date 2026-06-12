@@ -11,7 +11,6 @@ const authMiddleware = require(path.resolve(__dirname, '../middlewares/auth'));
 const leituraRoutes = require(path.resolve(__dirname, '../routes/leitura'));
 
 const app = express();
-// ... O resto do seu código do index.js continua igual abaixo daqui
 
 // Configuração robusta de CORS para evitar bloqueios no navegador do Aluno
 app.use(cors({
@@ -34,7 +33,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Rota raiz de verificação de status (Health Check)
+// Rota raiz de verificação de status (Health Check para requisições GET)
 app.get('/', (req, res) => {
     res.json({ message: 'API SESI Leitura online e integrada com sucesso!', status: 'online' });
 });
@@ -82,9 +81,11 @@ async function tratarLoginCadastro(req, res) {
     }
 }
 
-// Vinculação dos endpoints de login/cadastro (Duplo caminho preventivo contra 404 da Vercel)
+// Vinculação dos endpoints de login/cadastro (Multi-caminho preventivo contra o roteamento da Vercel)
 app.post('/api/auth/login-ou-cadastro', tratarLoginCadastro);
 app.post('/auth/login-ou-cadastro', tratarLoginCadastro);
+app.post('/login-ou-cadastro', tratarLoginCadastro);
+app.post('/', tratarLoginCadastro); // 🟢 RESOLVE O PROBLEMA: Aceita requisições POST vindas da URL limpa da Vercel
 
 // Acoplamento do ecossistema mapeado de rotas de leitura (Termômetro, Ranking, Progresso e Registro)
 app.use('/api/leitura', leituraRoutes);
@@ -98,8 +99,6 @@ app.use((req, res) => {
         message: 'Verifique se o método HTTP ou o endereço da URL correspondem aos padrões do projeto.'
     });
 });
-
-// ... todo o seu código anterior continua aqui em cima ...
 
 // 🚀 ESSA PARTE LIGA O SERVIDOR LOCALMENTE E MOSTRA O LINK NO TERMINAL
 const PORT = process.env.PORT || 3000;

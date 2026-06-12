@@ -1,18 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-
-// 🟢 LINK DIRETO PARA O .ENV NA RAIZ (Subindo uma pasta da pasta 'api')
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-
-// Importações protegidas
-const supabase = require(path.resolve(__dirname, '../services/supabaseClient'));
-const authMiddleware = require(path.resolve(__dirname, '../middlewares/auth'));
-const leituraRoutes = require(path.resolve(__dirname, '../routes/leitura'));
+// Otimizado: Importa a instância centralizada e segura que configuramos no seu serviço
+const supabase = require('../services/supabaseClient');
 
 const app = express();
 
-// Configuração robusta de CORS para evitar bloqueios no navegador do Aluno
+// Configuração robusta de CORS para evitar bloqueios no navegador
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -20,7 +13,7 @@ app.use(cors({
     credentials: true
 }));
 
-// Middleware interceptador para responder requisições de teste (OPTIONS) do CORS
+// Middleware para responder imediatamente às requisições de teste (OPTIONS) do CORS
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -33,80 +26,175 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Rota raiz de verificação de status (Health Check para requisições GET)
+// Auxiliar para pegar a data atual no fuso de São Paulo (AAAA-MM-DD) sincronizado com o front
+function getDataSaoPaulo() {
+    return new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).split(" ")[0];
+}
+
+// Rota de teste na raiz do servidor
 app.get('/', (req, res) => {
-    res.json({ message: 'API SESI Leitura online e integrada com sucesso!', status: 'online' });
+    res.json({ message: 'API SESI Leitura online e integrada ao Supabase!', status: 'online' });
 });
 
-// ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
+// ============ FUNÇÃO AUXILIAR DA ROTA DE AUTENTICAÇÃO ============
 async function tratarLoginCadastro(req, res) {
     const { rm, nome, turma } = req.body;
-    
+
     if (!rm) {
-        return res.status(400).json({ error: 'O número do RM é obrigatório para acessar.' });
+        return res.status(400).json({ error: 'RM é obrigatório' });
     }
 
     try {
-        // Busca o aluno de forma blindada com maybeSingle() evitando estourar erro interno
+        // Verifica se o aluno já existe no Supabase de forma limpa usando maybeSingle
         const { data: alunoExistente, error: erroBusca } = await supabase
             .from('alunos')
             .select('*')
             .eq('rm', rm)
             .maybeSingle();
 
-        if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
+        if (erroBusca) {
+            return res.status(500).json({ error: 'Erro no banco: ' + erroBusca.message });
+        }
 
-        // Se encontrou o aluno cadastrado, retorna os dados para o localStorage do front
+        // Se encontrou o aluno, faz Login estruturado como o seu script.js espera
         if (alunoExistente) {
-            return res.json({ success: true, message: 'Login efetuado com sucesso!', aluno: alunoExistente });
+            return res.json({ message: 'Login efetuado com sucesso!', aluno: alunoExistente });
         }
 
-        // Se o RM não existe e o aluno não passou os dados cadastrais, barra o fluxo indicando registro
+        // Se não encontrou e faltam dados, não cria (É uma tentativa de login inválida)
         if (!nome || !turma) {
-            return res.status(404).json({ error: 'Aluno não cadastrado. Preencha o formulário de Registro.' });
+            return res.status(404).json({ error: 'RM não cadastrado. Preencha todos os campos para se cadastrar.' });
         }
 
-        // Se o formulário de Registro foi preenchido, insere o aluno automaticamente
+        // Se não encontrou e tem os dados, faz o Cadastro completo
         const { data: novoAluno, error: erroInsercao } = await supabase
             .from('alunos')
             .insert([{ rm, nome, turma }])
             .select()
             .single();
 
-        if (erroInsercao) return res.status(500).json({ error: 'Erro ao registrar aluno: ' + erroInsercao.message });
+        if (erroInsercao) {
+            return res.status(500).json({ error: 'Erro ao cadastrar aluno: ' + erroInsercao.message });
+        }
 
-        return res.status(201).json({ success: true, message: 'Cadastro efetuado com sucesso!', aluno: novoAluno });
+        return res.status(201).json({ message: 'Cadastro efetuado com sucesso!', aluno: novoAluno });
+
     } catch (err) {
-        return res.status(500).json({ error: 'Falha interna no processamento: ' + err.message });
+        return res.status(500).json({ error: 'Erro interno: ' + err.message });
     }
 }
 
-// Vinculação dos endpoints de login/cadastro (Multi-caminho preventivo contra o roteamento da Vercel)
+// SOLUÇÃO DO 404: Escuta a rota com e sem o prefixo /api que a Vercel altera
 app.post('/api/auth/login-ou-cadastro', tratarLoginCadastro);
 app.post('/auth/login-ou-cadastro', tratarLoginCadastro);
-app.post('/login-ou-cadastro', tratarLoginCadastro);
-app.post('/', tratarLoginCadastro); // 🟢 RESOLVE O PROBLEMA: Aceita requisições POST vindas da URL limpa da Vercel
 
-// Acoplamento do ecossistema mapeado de rotas de leitura (Termômetro, Ranking, Progresso e Registro)
-app.use('/api/leitura', leituraRoutes);
-app.use('/leitura', leituraRoutes);
 
-// ============ TRATAMENTO CENTRALIZADO DE ROTAS INEXISTENTES ============
-app.use((req, res) => {
-    res.status(404).json({ 
-        error: 'Rota não localizada no servidor da API.', 
-        path: req.originalUrl,
-        message: 'Verifique se o método HTTP ou o endereço da URL correspondem aos padrões do projeto.'
-    });
+// Auxiliar para capturar o RM enviado pelo seu front-end (via Query string ou via Headers)
+const obterRM = (req) => req.query.rm || req.headers.rm || req.headers['rm'];
+
+
+// ============ MAPEAMENTO DAS ROTAS DE LEITURA (DUPLO CAMINHO) ============
+
+app.get(['/api/leitura/termometro', '/leitura/termometro'], async (req, res) => {
+    try {
+        const { data, error } = await supabase.from('registros_leitura').select('minutos');
+        if (error) throw error;
+        const total = data?.reduce((s, r) => s + r.minutos, 0) || 0;
+        res.json({ total_escola: total, meta: 1000000 });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// 🚀 ESSA PARTE LIGA O SERVIDOR LOCALMENTE E MOSTRA O LINK NO TERMINAL
-const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`\n🚀 Servidor do projeto SESI Leitura online com sucesso!`);
-        console.log(`📍 Link para acessar: http://localhost:${PORT}\n`);
-    });
-}
+app.get(['/api/leitura/ranking', '/leitura/ranking'], async (req, res) => {
+    try {
+        const hoje = getDataSaoPaulo();
+        
+        // Otimizado: Busca alunos e leituras casados usando o relacionamento nativo do Supabase
+        const { data, error } = await supabase
+            .from('registros_leitura')
+            .select('minutos, alunos!inner(turma)')
+            .eq('data_registro', hoje);
+        
+        if (error || !data) return res.json([]);
+        
+        const turmas = {};
+        data.forEach(reg => {
+            const turma = reg.alunos?.turma;
+            if (turma) turmas[turma] = (turmas[turma] || 0) + reg.minutos;
+        });
+        
+        const ranking = Object.entries(turmas)
+            .map(([turma, total]) => ({ turma, total }))
+            .sort((a, b) => b.total - a.total);
+        
+        res.json(ranking);
+    } catch (e) {
+        res.json([]);
+    }
+});
+
+app.get(['/api/leitura/progresso', '/leitura/progresso'], async (req, res) => {
+    const rm = obterRM(req);
+    if (!rm) return res.status(401).json({ error: 'RM não informado' });
+
+    try {
+        // Correção de falha estrutural do Supabase alterando .single() por .maybeSingle()
+        const { data: aluno, error: erroAluno } = await supabase
+            .from('alunos').select('id').eq('rm', rm).maybeSingle();
+        
+        if (erroAluno || !aluno) return res.status(401).json({ error: 'Aluno não cadastrado' });
+
+        const { data: registros, error: erroRegistros } = await supabase
+            .from('registros_leitura')
+            .select('minutos, data_registro')
+            .eq('aluno_id', aluno.id);
+        
+        if (erroRegistros) throw erroRegistros;
+        
+        res.json({ progresso: registros || [] });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post(['/api/leitura/registrar', '/leitura/registrar'], async (req, res) => {
+    const { minutos } = req.body;
+    const rm = obterRM(req);
+    
+    if (!rm) return res.status(401).json({ error: 'RM não informado' });
+    if (!minutos || minutos <= 0 || minutos > 16) return res.status(400).json({ error: 'Minutos inválidos (1-16)' });
+
+    try {
+        // Correção de falha estrutural do Supabase alterando .single() por .maybeSingle()
+        const { data: aluno, error: erroAluno } = await supabase
+            .from('alunos').select('id').eq('rm', rm).maybeSingle();
+        
+        if (erroAluno || !aluno) return res.status(401).json({ error: 'Aluno não encontrado' });
+
+        const hoje = getDataSaoPaulo();
+        
+        const { data: registrosHoje } = await supabase
+            .from('registros_leitura')
+            .select('minutos')
+            .eq('aluno_id', aluno.id)
+            .eq('data_registro', hoje);
+        
+        const totalHoje = registrosHoje?.reduce((s, r) => s + r.minutos, 0) || 0;
+        if (totalHoje + minutos > 16) {
+            return res.status(400).json({ error: `Limite diário atingido. Você já leu ${totalHoje} min hoje. Restam apenas ${16 - totalHoje} min.` });
+        }
+
+        const { error: insertError } = await supabase
+            .from('registros_leitura')
+            .insert([{ aluno_id: aluno.id, minutos, data_registro: hoje }]);
+        
+        if (insertError) return res.status(500).json({ error: 'Erro ao salvar leitura no banco de dados' });
+        
+        res.json({ success: true, message: 'Leitura registrada com sucesso!' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 module.exports = app;
