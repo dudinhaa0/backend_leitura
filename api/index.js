@@ -43,43 +43,28 @@ app.get('/', (req, res) => {
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 async function tratarLoginCadastro(req, res) {
-    const { rm, nome, turma } = req.body;
+    // Aceita tanto se o front mandar 'rm' minúsculo quanto se mandar outra variação
+    const rm = req.body.rm || req.body.RM;
     
     if (!rm) {
         return res.status(400).json({ error: 'O número do RM é obrigatório para acessar.' });
     }
 
     try {
-        // 🟢 ATENÇÃO AQUI: Mudamos para 'RM' (Maiúsculo) para bater com o seu Supabase
+        // Busca na coluna 'RM' maiúscula do seu Supabase
         const { data: alunoExistente, error: erroBusca } = await supabase
             .from('usuarios')
             .select('*')
-            .eq('RM', rm) // 🟢 'RM' maiúsculo puxa a coluna idêntica do seu print!
+            .eq('RM', rm.toString()) // Garante que compara como texto
             .maybeSingle();
 
         if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
 
-        // Se encontrou o aluno cadastrado, retorna os dados para o localStorage do front
         if (alunoExistente) {
             return res.json({ success: true, message: 'Login efetuado com sucesso!', aluno: alunoExistente });
         }
 
-        // Se o RM não existe e o aluno não passou os dados cadastrais, barra o fluxo indicando registro
-        if (!nome || !turma) {
-            return res.status(404).json({ error: 'Usuário não cadastrado no sistema.' });
-        }
-
-        // Se o formulário de Registro foi preenchido, insere o aluno automaticamente
-        // 🟢 'RM' maiúsculo também aqui na inserção se for cadastrar um novo
-        const { data: novoAluno, error: erroInsercao } = await supabase
-            .from('usuarios')
-            .insert([{ RM: rm, nome, turma }])
-            .select()
-            .single();
-
-        if (erroInsercao) return res.status(500).json({ error: 'Erro ao registrar aluno: ' + erroInsercao.message });
-
-        return res.status(201).json({ success: true, message: 'Cadastro efetuado com sucesso!', aluno: novoAluno });
+        return res.status(404).json({ error: 'Usuário não cadastrado no sistema.' });
     } catch (err) {
         return res.status(500).json({ error: 'Falha interna no processamento: ' + err.message });
     }
