@@ -40,37 +40,38 @@ app.get('/', (req, res) => {
 
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
+// ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 async function tratarLoginCadastro(req, res) {
-    const { rm, nome, turma } = req.body;
+    const { email, nome, turma } = req.body; // 🟢 Agora aceita o email vindo do front
     
-    if (!rm) {
-        return res.status(400).json({ error: 'O número do RM é obrigatório para acessar.' });
+    if (!email) {
+        return res.status(400).json({ error: 'O e-mail é obrigatório para acessar.' });
     }
 
     try {
-        // 🟢 ALTERADO DE 'alunos' PARA 'usuarios'
+        // Busca o aluno no Supabase comparando a coluna 'email' com o e-mail vindo do front
         const { data: alunoExistente, error: erroBusca } = await supabase
-            .from('usuarios')
+            .from('usuarios') // 🟢 Tabela correta do seu banco
             .select('*')
-            .eq('rm', rm)
+            .eq('email', email) // 🟢 Coluna correta do seu banco
             .maybeSingle();
 
         if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
 
-        // Se encontrou o usuário cadastrado, retorna os dados para o localStorage do front
+        // Se encontrou o aluno cadastrado, retorna os dados com sucesso
         if (alunoExistente) {
             return res.json({ success: true, message: 'Login efetuado com sucesso!', aluno: alunoExistente });
         }
 
-        // Se o RM não existe e o aluno não passou os dados cadastrais, barra o fluxo indicando registro
+        // Se o e-mail não existe no banco e não mandou dados para registrar, barra o login
         if (!nome || !turma) {
-            return res.status(404).json({ error: 'Aluno não cadastrado. Preencha o formulário de Registro.' });
+            return res.status(404).json({ error: 'Usuário não cadastrado no sistema.' });
         }
 
-        // 🟢 ALTERADO DE 'alunos' PARA 'usuarios'
+        // Se veio do formulário de registro com nome/turma, cria o usuário automaticamente
         const { data: novoAluno, error: erroInsercao } = await supabase
             .from('usuarios')
-            .insert([{ rm, nome, turma }])
+            .insert([{ email, nome, turma }])
             .select()
             .single();
 
@@ -81,7 +82,6 @@ async function tratarLoginCadastro(req, res) {
         return res.status(500).json({ error: 'Falha interna no processamento: ' + err.message });
     }
 }
-
 // Vinculação dos endpoints de login/cadastro
 app.post('/api/auth/login-ou-cadastro', tratarLoginCadastro);
 app.post('/auth/login-ou-cadastro', tratarLoginCadastro);
