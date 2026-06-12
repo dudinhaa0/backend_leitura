@@ -41,37 +41,39 @@ app.get('/', (req, res) => {
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 // ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
+// ============ LÓGICA DE AUTENTICAÇÃO CENTRALIZADA NO SERVIDOR ============
 async function tratarLoginCadastro(req, res) {
-    const { email, nome, turma } = req.body; // 🟢 Agora aceita o email vindo do front
+    const { rm, nome, turma } = req.body;
     
-    if (!email) {
-        return res.status(400).json({ error: 'O e-mail é obrigatório para acessar.' });
+    if (!rm) {
+        return res.status(400).json({ error: 'O número do RM é obrigatório para acessar.' });
     }
 
     try {
-        // Busca o aluno no Supabase comparando a coluna 'email' com o e-mail vindo do front
+        // 🟢 ATENÇÃO AQUI: Mudamos para 'RM' (Maiúsculo) para bater com o seu Supabase
         const { data: alunoExistente, error: erroBusca } = await supabase
-            .from('usuarios') // 🟢 Tabela correta do seu banco
+            .from('usuarios')
             .select('*')
-            .eq('email', email) // 🟢 Coluna correta do seu banco
+            .eq('RM', rm) // 🟢 'RM' maiúsculo puxa a coluna idêntica do seu print!
             .maybeSingle();
 
         if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
 
-        // Se encontrou o aluno cadastrado, retorna os dados com sucesso
+        // Se encontrou o aluno cadastrado, retorna os dados para o localStorage do front
         if (alunoExistente) {
             return res.json({ success: true, message: 'Login efetuado com sucesso!', aluno: alunoExistente });
         }
 
-        // Se o e-mail não existe no banco e não mandou dados para registrar, barra o login
+        // Se o RM não existe e o aluno não passou os dados cadastrais, barra o fluxo indicando registro
         if (!nome || !turma) {
             return res.status(404).json({ error: 'Usuário não cadastrado no sistema.' });
         }
 
-        // Se veio do formulário de registro com nome/turma, cria o usuário automaticamente
+        // Se o formulário de Registro foi preenchido, insere o aluno automaticamente
+        // 🟢 'RM' maiúsculo também aqui na inserção se for cadastrar um novo
         const { data: novoAluno, error: erroInsercao } = await supabase
             .from('usuarios')
-            .insert([{ email, nome, turma }])
+            .insert([{ RM: rm, nome, turma }])
             .select()
             .single();
 
