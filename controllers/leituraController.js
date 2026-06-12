@@ -1,11 +1,37 @@
 const supabase = require('../services/supabaseClient');
 
+// Função auxiliar para pegar a data atual no fuso de São Paulo (AAAA-MM-DD)
+function getDataSaoPaulo() {
+  return new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).split(" ")[0];
+}
+
+// Função auxiliar interna para buscar o ID do aluno com base no RM enviado pelo seu front-end
+async function buscarAlunoPorRm(req) {
+  const rm = req.query.rm || req.headers.rm;
+  if (!rm) return null;
+
+  const { data: aluno, error } = await supabase
+    .from('alunos')
+    .select('id')
+    .eq('rm', rm)
+    .maybeSingle();
+
+  if (error || !aluno) return null;
+  return aluno.id;
+}
+
 // Registrar minutos lidos (Limite de 16 min por dia)
 async function registrarMinutos(req, res) {
   const { minutos } = req.body;
-  const alunoId = req.aluno.id;
   
-  const hoje = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).split(" ")[0];
+  // Adaptado: Busca o ID do aluno de acordo com o RM enviado pelo seu projeto
+  const alunoId = await buscarAlunoPorRm(req);
+  
+  if (!alunoId) {
+    return res.status(401).json({ error: 'RM não informado ou aluno não cadastrado' });
+  }
+
+  const hoje = getDataSaoPaulo();
 
   if (!minutos || minutos <= 0 || minutos > 16) {
     return res.status(400).json({ error: 'Minutos inválidos (deve ser entre 1 e 16)' });
@@ -22,7 +48,7 @@ async function registrarMinutos(req, res) {
       return res.status(500).json({ error: 'Erro ao verificar registros de hoje' });
     }
 
-    const totalHoje = registrosHoje.reduce((sum, r) => sum + r.minutos, 0);
+    const totalHoje = registrosHoje?.reduce((sum, r) => sum + r.minutos, 0) || 0;
 
     if (totalHoje + minutos > 16) {
       const restante = 16 - totalHoje;
@@ -47,7 +73,12 @@ async function registrarMinutos(req, res) {
 
 // Progresso semanal do usuário conectado
 async function progressoSemana(req, res) {
-  const alunoId = req.aluno.id;
+  // Adaptado: Identifica o aluno pelo RM vindo do front-end do seu projeto
+  const alunoId = await buscarAlunoPorRm(req);
+  
+  if (!alunoId) {
+    return res.status(401).json({ error: 'RM não informado ou aluno não cadastrado' });
+  }
   
   try {
     const { data, error } = await supabase
@@ -76,7 +107,7 @@ async function termometroGeral(req, res) {
       return res.status(500).json({ error: 'Erro ao buscar dados do termômetro' });
     }
 
-    const totalMinutos = data.reduce((sum, r) => sum + r.minutos, 0);
+    const totalMinutos = data?.reduce((sum, r) => sum + r.minutos, 0) || 0;
     return res.json({ total_escola: totalMinutos, meta: 1000000 });
   } catch (e) {
     return res.status(500).json({ error: 'Erro interno: ' + e.message });
@@ -86,7 +117,7 @@ async function termometroGeral(req, res) {
 // RANKING DIÁRIO SEGURO E BLINDADO (QUEM LEU MAIS HOJE)
 async function rankingTurmas(req, res) {
   try {
-    const hoje = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).split(" ")[0];
+    const hoje = getDataSaoPaulo();
 
     // Busca todos os alunos para mapear as turmas de forma independente
     const { data: todosAlunos, error: erroAlunos } = await supabase

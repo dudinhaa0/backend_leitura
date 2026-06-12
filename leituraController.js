@@ -1,9 +1,34 @@
 const supabase = require('../services/supabaseClient');
 
+// Função auxiliar interna para buscar o ID do aluno com base no RM enviado pelo front do seu projeto
+async function buscarAlunoIdPorRm(req) {
+  const rm = req.query.rm || req.headers.rm || req.headers['rm'];
+  if (!rm) return null;
+
+  try {
+    const { data: aluno, error } = await supabase
+      .from('alunos')
+      .select('id')
+      .eq('rm', rm)
+      .maybeSingle(); // Impede falhas brutas 406 do PostgREST se o RM não existir
+
+    if (error || !aluno) return null;
+    return aluno.id;
+  } catch (err) {
+    return null;
+  }
+}
+
 // Registrar minutos lidos (Limite de 16 min por dia)
 async function registrarMinutos(req, res) {
   const { minutos } = req.body;
-  const alunoId = req.aluno.id;
+  
+  // Adaptado para o SEU PROJETO: Identifica o aluno dinamicamente pelo RM da requisição
+  const alunoId = req.aluno?.id || (await buscarAlunoIdPorRm(req));
+  
+  if (!alunoId) {
+    return res.status(401).json({ error: 'Acesso negado. RM inválido ou não informado.' });
+  }
   
   // Garante a data local formatada como YYYY-MM-DD baseado no fuso horário de Brasília
   const hoje = new Date().toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo" }).split(" ")[0];
@@ -25,7 +50,8 @@ async function registrarMinutos(req, res) {
       return res.status(500).json({ error: 'Erro ao verificar registros de hoje' });
     }
 
-    const totalHoje = registrosHoje.reduce((sum, r) => sum + r.minutos, 0);
+    // Otimizado: Garante proteção caso registrosHoje venha nulo ou indefinido
+    const totalHoje = registrosHoje?.reduce((sum, r) => sum + r.minutos, 0) || 0;
 
     if (totalHoje + minutos > 16) {
       const restante = 16 - totalHoje;
@@ -40,7 +66,7 @@ async function registrarMinutos(req, res) {
       .insert([{ aluno_id: alunoId, minutos, data_registro: hoje }]);
 
     if (insertError) {
-      return res.status(500).json({ error: 'Erro ao salvar o registro de leitura' });
+      return res.status(500).json({ error: 'Erro ao salvar o registro de leitura no banco de dados' });
     }
 
     return res.json({ success: true, message: 'Leitura registrada com sucesso!' });
@@ -51,7 +77,12 @@ async function registrarMinutos(req, res) {
 
 // Progresso semanal do usuário conectado
 async function progressoSemana(req, res) {
-  const alunoId = req.aluno.id;
+  // Adaptado para o SEU PROJETO: Identifica o aluno pelo RM vindo do front-end
+  const alunoId = req.aluno?.id || (await buscarAlunoIdPorRm(req));
+  
+  if (!alunoId) {
+    return res.status(401).json({ error: 'Acesso negado. RM inválido ou não informado.' });
+  }
   
   try {
     // Busca todos os registros de leitura do aluno
@@ -81,7 +112,8 @@ async function termometroGeral(req, res) {
       return res.status(500).json({ error: 'Erro ao buscar dados do termômetro' });
     }
 
-    const totalMinutos = data.reduce((sum, r) => sum + r.minutos, 0);
+    // Otimizado: Evita travamento com fallbacks seguros para o acumulador do total
+    const totalMinutos = data?.reduce((sum, r) => sum + r.minutos, 0) || 0;
     return res.json({ total_escola: totalMinutos, meta: 1000000 });
   } catch (e) {
     return res.status(500).json({ error: 'Erro interno: ' + e.message });
@@ -91,10 +123,10 @@ async function termometroGeral(req, res) {
 // Ranking por turma (À prova de falhas de relacionamento no banco)
 async function rankingTurmas(req, res) {
   try {
-    // Busca os minutos e traz os dados do aluno relacionado usando a relação padrão
+    // Otimizado: Injeção do modificador "!inner" para garantir integridade relacional do Supabase
     const { data, error } = await supabase
       .from('registros_leitura')
-      .select('minutos, alunos(turma)');
+      .select('minutos, alunos!inner(turma)');
 
     if (error) {
       console.error('Erro na consulta do Supabase para o ranking:', error);

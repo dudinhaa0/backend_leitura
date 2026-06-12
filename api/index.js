@@ -81,11 +81,12 @@ async function tratarLoginCadastro(req, res) {
     }
 }
 
-// Vinculação dos endpoints de login/cadastro (Multi-caminho preventivo contra o roteamento da Vercel)
+// Vinculação dos endpoints de login/cadastro
 app.post('/api/auth/login-ou-cadastro', tratarLoginCadastro);
 app.post('/auth/login-ou-cadastro', tratarLoginCadastro);
 app.post('/login-ou-cadastro', tratarLoginCadastro);
-app.post('/', tratarLoginCadastro); // 🟢 RESOLVE O PROBLEMA: Aceita requisições POST vindas da URL limpa da Vercel
+app.post('/', tratarLoginCadastro); 
+app.post('/api/login-novo', tratarLoginCadastro); // 🟢 ADICIONE ESTA LINHA EXATAMENTE AQUI!
 
 // Acoplamento do ecossistema mapeado de rotas de leitura (Termômetro, Ranking, Progresso e Registro)
 app.use('/api/leitura', leituraRoutes);
