@@ -40,41 +40,64 @@ async function tratarLoginCadastro(req, res) {
     const { rm, nome, turma } = req.body;
     
     if (!rm) {
-        return res.status(400).json({ error: 'O número do RM é obrigatório para acessar.' });
+        return res.status(400).json({ error: 'O número do RM é obrigatório.' });
     }
 
     try {
-        // Busca o aluno de forma blindada com maybeSingle() evitando estourar erro interno
-        const { data: alunoExistente, error: erroBusca } = await supabase
-            .from('alunos')
+        // ✅ CORRIGIDO: usa 'usuarios' e 'RM' maiúsculo
+        const { data: usuarioExistente, error: erroBusca } = await supabase
+            .from('usuarios')
             .select('*')
-            .eq('rm', rm)
+            .eq('RM', String(rm))
             .maybeSingle();
 
-        if (erroBusca) return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
-
-        // Se encontrou o aluno cadastrado, retorna os dados para o localStorage do front
-        if (alunoExistente) {
-            return res.json({ message: 'Login efetuado com sucesso!', aluno: alunoExistente });
+        if (erroBusca) {
+            console.error('Erro no Supabase:', erroBusca);
+            return res.status(500).json({ error: 'Erro de leitura no banco: ' + erroBusca.message });
         }
 
-        // Se o RM não existe e o aluno não passou os dados cadastrais, barra o fluxo indicando registro
+        // Se encontrou o usuário
+        if (usuarioExistente) {
+            return res.json({ 
+                success: true, 
+                message: 'Login efetuado com sucesso!', 
+                aluno: usuarioExistente 
+            });
+        }
+
+        // Se não encontrou e faltam dados, não cria
         if (!nome || !turma) {
-            return res.status(404).json({ error: 'RM não cadastrado. Preencha o Nome e a Turma para realizar seu Registro.' });
+            return res.status(404).json({ 
+                error: 'RM não cadastrado. Preencha todos os campos para se cadastrar.' 
+            });
         }
 
-        // Se o formulário de Registro foi preenchido, insere o aluno automaticamente
+        // ✅ CORRIGIDO: insere na tabela 'usuarios'
         const { data: novoAluno, error: erroInsercao } = await supabase
-            .from('alunos')
-            .insert([{ rm, nome, turma }])
+            .from('usuarios')
+            .insert([{ 
+                RM: String(rm),
+                nome: nome, 
+                turma: turma,
+                email: `${rm}@sesi.com.br`,
+                senha: '123456'
+            }])
             .select()
             .single();
 
-        if (erroInsercao) return res.status(500).json({ error: 'Erro ao cadastrar aluno: ' + erroInsercao.message });
+        if (erroInsercao) {
+            console.error('Erro ao inserir:', erroInsercao);
+            return res.status(500).json({ error: 'Erro ao cadastrar aluno: ' + erroInsercao.message });
+        }
 
-        return res.status(201).json({ message: 'Cadastro efetuado com sucesso!', aluno: novoAluno });
+        return res.status(201).json({ 
+            success: true, 
+            message: 'Cadastro efetuado com sucesso!', 
+            aluno: novoAluno 
+        });
     } catch (err) {
-        return res.status(500).json({ error: 'Falha interna no processamento: ' + err.message });
+        console.error('Erro fatal:', err);
+        return res.status(500).json({ error: 'Falha interna: ' + err.message });
     }
 }
 

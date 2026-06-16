@@ -46,10 +46,10 @@ async function tratarLoginCadastro(req, res) {
 
     try {
         // Verifica se o aluno já existe no Supabase de forma limpa usando maybeSingle
-        const { data: alunoExistente, error: erroBusca } = await supabase
-            .from('alunos')
+        const { data: usuarioExistente, error: erroBusca } = await supabase
+            .from('usuarios')
             .select('*')
-            .eq('rm', rm)
+            .eq('RM', String(rm))
             .maybeSingle();
 
         if (erroBusca) {
